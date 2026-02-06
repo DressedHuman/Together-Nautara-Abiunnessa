@@ -7,6 +7,8 @@ from django.shortcuts import get_object_or_404
 
 from .models import Batch
 from .serializers import BatchListSerializer, BatchDetailSerializer
+from alumni.models import AlumniProfile
+from alumni.serializers import AlumniListSerializer
 
 
 class BatchListView(APIView):
@@ -42,10 +44,16 @@ class BatchAlumniView(APIView):
     def get(self, request, year):
         batch = get_object_or_404(Batch, year=year)
         
-        # Will be implemented after AlumniProfile model
-        # For now, return empty list structure
+        # Only show approved alumni to public
+        alumni = AlumniProfile.objects.filter(
+            batch=batch,
+            status='approved'
+        ).select_related('batch').order_by('full_name_en')
+        
+        serializer = AlumniListSerializer(alumni, many=True)
+        
         return Response({
             'batch': BatchListSerializer(batch).data,
-            'alumni': [],
-            'total': 0
+            'alumni': serializer.data,
+            'total': alumni.count()
         })
