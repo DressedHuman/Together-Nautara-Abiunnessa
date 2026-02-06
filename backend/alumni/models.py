@@ -3,6 +3,7 @@ import os
 from django.db import models
 from django.conf import settings
 from django.core.validators import URLValidator
+from core.validators import validate_image_extension
 
 
 def profile_photo_path(instance, filename):
@@ -54,7 +55,12 @@ class AlumniProfile(models.Model):
     linkedin = models.URLField(blank=True, validators=[URLValidator()])
     
     # Photo
-    photo = models.ImageField(upload_to=profile_photo_path, blank=True, null=True)
+    photo = models.ImageField(
+        upload_to=profile_photo_path,
+        blank=True,
+        null=True,
+        validators=[validate_image_extension]
+    )
     
     # Approval status
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
