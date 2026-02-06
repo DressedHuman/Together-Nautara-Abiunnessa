@@ -10,6 +10,7 @@ urlpatterns = [
     path('api/v1/batches/', include('batches.urls')),
     path('api/v1/alumni/', include('alumni.urls')),
     path('api/v1/approvals/', include('approvals.urls')),
+    path('api/v1/directory/', include('directory.urls')),
 ]
 
 if settings.DEBUG:
