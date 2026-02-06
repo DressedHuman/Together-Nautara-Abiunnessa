@@ -17,7 +17,7 @@
             "framework": "Django",
             "api": "Django REST Framework",
             "auth": "JWT",
-            "database": "PostgreSQL"
+            "database": "SQLite3"
         },
         "frontend": {
             "framework": "React",
@@ -304,7 +304,7 @@
     "deployment": {
         "backend": "Render or Railway",
         "frontend": "Vercel",
-        "database": "Managed PostgreSQL",
+        "database": "SQLite3 (development)",
         "media": "Cloudinary"
     }
 }
