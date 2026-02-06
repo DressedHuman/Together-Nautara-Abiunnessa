@@ -1,0 +1,310 @@
+{
+    "project": {
+        "name": "Together — Nautara Abiunnessa Alumni",
+        "domain": "together.nautaraablhs.edu.bd",
+        "type": "Alumni Identity & Directory Platform",
+        "mvp_goal": "Build verified alumni database and searchable directory",
+        "target_users": 1000,
+        "timeline_days": 30,
+        "languages_supported": [
+            "bn",
+            "en"
+        ],
+        "school_type": "co-education"
+    },
+    "stack": {
+        "backend": {
+            "framework": "Django",
+            "api": "Django REST Framework",
+            "auth": "JWT",
+            "database": "PostgreSQL"
+        },
+        "frontend": {
+            "framework": "React",
+            "language": "TypeScript",
+            "router": "react-router-dom",
+            "state": "Redux Toolkit",
+            "styling": "TailwindCSS"
+        },
+        "infra": {
+            "backend_hosting": [
+                "Render",
+                "Railway"
+            ],
+            "frontend_hosting": [
+                "Vercel"
+            ],
+            "media": "Cloudinary",
+            "email": "Brevo",
+            "sms": "Future"
+        }
+    },
+    "roles": [
+        {
+            "name": "public",
+            "permissions": [
+                "view_directory_public"
+            ]
+        },
+        {
+            "name": "alumni",
+            "permissions": [
+                "edit_own_profile",
+                "view_directory",
+                "view_batches"
+            ]
+        },
+        {
+            "name": "coordinator",
+            "permissions": [
+                "view_batch_members",
+                "recommend_verification"
+            ]
+        },
+        {
+            "name": "committee",
+            "permissions": [
+                "approve_alumni",
+                "reject_alumni",
+                "view_all_profiles",
+                "manage_batches"
+            ]
+        }
+    ],
+    "database": {
+        "models": {
+            "User": {
+                "type": "AbstractUser",
+                "fields": {
+                    "id": "uuid",
+                    "email": {
+                        "type": "string",
+                        "unique": true,
+                        "required": true
+                    },
+                    "phone": {
+                        "type": "string",
+                        "unique": true,
+                        "required": true
+                    },
+                    "password": "hashed",
+                    "username": "string",
+                    "role": {
+                        "type": "enum",
+                        "values": [
+                            "committee",
+                            "coordinator",
+                            "alumni"
+                        ],
+                        "default": "alumni"
+                    },
+                    "is_verified": {
+                        "type": "boolean",
+                        "default": false
+                    },
+                    "created_at": "datetime",
+                    "updated_at": "datetime"
+                }
+            },
+            "Batch": {
+                "fields": {
+                    "id": "uuid",
+                    "year": {
+                        "type": "integer",
+                        "unique": true
+                    },
+                    "display_name": "string",
+                    "created_at": "datetime",
+                    "updated_at": "datetime"
+                }
+            },
+            "BatchCoordinator": {
+                "fields": {
+                    "id": "uuid",
+                    "batch_id": "FK -> Batch",
+                    "user_id": "FK -> User",
+                    "created_at": "datetime"
+                }
+            },
+            "AlumniProfile": {
+                "fields": {
+                    "id": "uuid",
+                    "user_id": "OneToOne -> User",
+                    "batch_id": "FK -> Batch",
+                    "roll": "string",
+                    "section": "string",
+                    "full_name_bn": "string",
+                    "full_name_en": "string",
+                    "city": "string",
+                    "country": "string",
+                    "profession": "string",
+                    "company": "string",
+                    "university": "string",
+                    "bio": "text",
+                    "facebook": "url",
+                    "linkedin": "url",
+                    "photo": "image",
+                    "status": {
+                        "type": "enum",
+                        "values": [
+                            "pending",
+                            "approved",
+                            "rejected"
+                        ],
+                        "default": "pending"
+                    },
+                    "approved_by": "FK -> User",
+                    "created_at": "datetime",
+                    "updated_at": "datetime"
+                }
+            },
+            "ApprovalLog": {
+                "fields": {
+                    "id": "uuid",
+                    "alumni_id": "FK -> AlumniProfile",
+                    "approved_by": "FK -> User",
+                    "status": "string",
+                    "note": "text",
+                    "created_at": "datetime"
+                }
+            },
+            "FutureTables": {
+                "Donation": {
+                    "status": "placeholder"
+                },
+                "Event": {
+                    "status": "placeholder"
+                },
+                "Mentorship": {
+                    "status": "placeholder"
+                },
+                "Job": {
+                    "status": "placeholder"
+                }
+            }
+        },
+        "indexes": [
+            "User.email",
+            "User.phone",
+            "AlumniProfile.batch_id",
+            "AlumniProfile.status",
+            "AlumniProfile.profession",
+            "AlumniProfile.country",
+            "AlumniProfile.full_name_en"
+        ]
+    },
+    "relationships": [
+        "User 1-1 AlumniProfile",
+        "Batch 1-N AlumniProfile",
+        "Batch 1-N BatchCoordinator",
+        "User 1-N ApprovalLog",
+        "AlumniProfile 1-N ApprovalLog"
+    ],
+    "auth_flow": {
+        "register": [
+            "input email/phone/password",
+            "send OTP",
+            "verify OTP",
+            "create User",
+            "create AlumniProfile status=pending"
+        ],
+        "login": [
+            "email/password OR phone/password",
+            "generate JWT access/refresh"
+        ],
+        "approval": [
+            "committee reviews pending",
+            "approve OR reject",
+            "update AlumniProfile.status"
+        ]
+    },
+    "api": {
+        "base": "/api/v1",
+        "auth": [
+            "POST /auth/register",
+            "POST /auth/login-email",
+            "POST /auth/login-phone",
+            "POST /auth/verify-otp",
+            "POST /auth/refresh-token",
+            "POST /auth/logout"
+        ],
+        "alumni": [
+            "GET /alumni/me",
+            "PUT /alumni/me/update",
+            "GET /alumni/{id}",
+            "GET /alumni/directory",
+            "GET /alumni/batch/{year}"
+        ],
+        "batch": [
+            "GET /batches",
+            "GET /batches/{year}",
+            "GET /batches/{year}/alumni"
+        ],
+        "approval": [
+            "GET /approvals/pending",
+            "POST /approvals/{id}/approve",
+            "POST /approvals/{id}/reject",
+            "GET /approvals/logs"
+        ],
+        "coordinator": [
+            "GET /coordinator/batch-alumni",
+            "POST /coordinator/verify-alumni"
+        ]
+    },
+    "permissions": {
+        "classes": [
+            "IsAuthenticated",
+            "IsCommittee",
+            "IsCoordinator",
+            "IsAlumniOwner",
+            "IsApprovedAlumni"
+        ]
+    },
+    "frontend": {
+        "routes": {
+            "public": [
+                "/",
+                "/about",
+                "/login",
+                "/register",
+                "/directory",
+                "/alumni/:id"
+            ],
+            "alumni": [
+                "/dashboard",
+                "/profile",
+                "/profile/edit"
+            ],
+            "committee": [
+                "/admin/approvals",
+                "/admin/alumni",
+                "/admin/batches"
+            ]
+        },
+        "store": [
+            "authSlice",
+            "alumniSlice",
+            "directorySlice",
+            "batchSlice",
+            "approvalSlice"
+        ],
+        "services": [
+            "authService",
+            "alumniService",
+            "batchService",
+            "approvalService"
+        ],
+        "types": [
+            "User",
+            "Alumni",
+            "Batch",
+            "Approval"
+        ]
+    },
+    "deployment": {
+        "backend": "Render or Railway",
+        "frontend": "Vercel",
+        "database": "Managed PostgreSQL",
+        "media": "Cloudinary"
+    }
+}
