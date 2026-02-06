@@ -1,7 +1,7 @@
 from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.parsers import MultiPartParser, FormParser
 
 from .models import AlumniProfile
@@ -10,6 +10,7 @@ from .serializers import (
     AlumniProfileCreateSerializer,
     AlumniProfileUpdateSerializer,
 )
+from core.permissions import IsVerifiedUser
 
 
 class MyProfileView(APIView):
@@ -70,7 +71,7 @@ class MyProfileView(APIView):
 
 class AlumniDetailView(APIView):
     """Get alumni profile by ID (public for approved profiles)."""
-    permission_classes = []
+    permission_classes = [AllowAny]
     
     def get(self, request, pk):
         try:
