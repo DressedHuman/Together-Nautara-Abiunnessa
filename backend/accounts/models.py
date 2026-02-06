@@ -1,6 +1,9 @@
 import uuid
+import random
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.db import models
+from django.utils import timezone
+from datetime import timedelta
 
 
 class UserManager(BaseUserManager):
@@ -41,6 +44,11 @@ class User(AbstractUser):
     phone = models.CharField(max_length=20, unique=True)
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='alumni')
     is_verified = models.BooleanField(default=False)
+    
+    # OTP fields
+    otp_code = models.CharField(max_length=6, blank=True, null=True)
+    otp_created_at = models.DateTimeField(blank=True, null=True)
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -58,3 +66,28 @@ class User(AbstractUser):
     
     def __str__(self):
         return self.email
+    
+    def generate_otp(self):
+        """Generate a 6-digit OTP and set expiry."""
+        self.otp_code = str(random.randint(100000, 999999))
+        self.otp_created_at = timezone.now()
+        self.save(update_fields=['otp_code', 'otp_created_at'])
+        return self.otp_code
+    
+    def verify_otp(self, code):
+        """Verify OTP code. Returns True if valid."""
+        if not self.otp_code or not self.otp_created_at:
+            return False
+        
+        # OTP expires after 5 minutes
+        expiry_time = self.otp_created_at + timedelta(minutes=5)
+        if timezone.now() > expiry_time:
+            return False
+        
+        if self.otp_code == code:
+            self.otp_code = None
+            self.otp_created_at = None
+            self.save(update_fields=['otp_code', 'otp_created_at'])
+            return True
+        
+        return False
