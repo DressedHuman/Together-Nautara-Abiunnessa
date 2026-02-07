@@ -31,12 +31,11 @@ class AlumniProfileSerializer(serializers.ModelSerializer):
 
 class AlumniProfileCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating alumni profile."""
-    batch_year = serializers.IntegerField(write_only=True)
     
     class Meta:
         model = AlumniProfile
         fields = [
-            'batch_year', 'roll', 'section',
+            'batch', 'roll', 'section',
             'full_name_bn', 'full_name_en', 'city', 'country',
             'profession', 'company', 'university', 'bio',
             'facebook', 'linkedin', 'photo'
@@ -52,19 +51,7 @@ class AlumniProfileCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('Full name (English) is required')
         return value.strip()
     
-    def validate_batch_year(self, value):
-        from batches.models import Batch
-        try:
-            Batch.objects.get(year=value)
-        except Batch.DoesNotExist:
-            raise serializers.ValidationError('Invalid batch year')
-        return value
-    
     def create(self, validated_data):
-        from batches.models import Batch
-        batch_year = validated_data.pop('batch_year')
-        batch = Batch.objects.get(year=batch_year)
-        validated_data['batch'] = batch
         validated_data['user'] = self.context['request'].user
         return super().create(validated_data)
 
@@ -75,7 +62,7 @@ class AlumniProfileUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = AlumniProfile
         fields = [
-            'roll', 'section', 'full_name_bn', 'full_name_en',
+            'batch', 'roll', 'section', 'full_name_bn', 'full_name_en',
             'city', 'country', 'profession', 'company', 'university',
             'bio', 'facebook', 'linkedin', 'photo'
         ]
