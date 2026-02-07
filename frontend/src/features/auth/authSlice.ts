@@ -22,7 +22,7 @@ export const login = createAsyncThunk(
     'auth/login',
     async (credentials: LoginCredentials, { rejectWithValue }) => {
         try {
-            const endpoint = credentials.email ? '/auth/login/email/' : '/auth/login/phone/';
+            const endpoint = credentials.email ? '/auth/login-email/' : '/auth/login-phone/';
             const { data } = await api.post(endpoint, credentials);
 
             localStorage.setItem('access_token', data.access);
