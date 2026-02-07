@@ -1,10 +1,11 @@
 import { Provider } from 'react-redux';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { store } from './store';
 import Layout from './components/layout/Layout';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import HomePage from './pages/HomePage';
 import DirectoryPage from './pages/DirectoryPage';
+import AlumniPublicProfilePage from './pages/AlumniPublicProfilePage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import ProfilePage from './pages/ProfilePage';
@@ -20,6 +21,7 @@ function App() {
           <Route path="/" element={<Layout />}>
             <Route index element={<HomePage />} />
             <Route path="directory" element={<DirectoryPage />} />
+            <Route path="directory/:id" element={<AlumniPublicProfilePage />} />
             <Route
               path="login"
               element={
@@ -60,7 +62,6 @@ function App() {
                 </ProtectedRoute>
               }
             />
-            {/* Redirect /profile to dashboard or vice-versa if needed, but keeping them separate for now */}
           </Route>
         </Routes>
       </BrowserRouter>

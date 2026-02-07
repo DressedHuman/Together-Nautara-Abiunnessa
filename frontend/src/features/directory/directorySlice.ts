@@ -4,7 +4,7 @@ import type { AlumniProfile, PaginatedResponse } from '../../types';
 
 interface DirectoryFilters {
     search?: string;
-    batch?: number;
+    batch?: string;
     profession?: string;
     country?: string;
     city?: string;
@@ -14,6 +14,7 @@ interface DirectoryFilters {
 
 interface DirectoryState {
     alumni: AlumniProfile[];
+    selectedAlumni: AlumniProfile | null;
     total: number;
     pages: number;
     currentPage: number;
@@ -24,10 +25,14 @@ interface DirectoryState {
 
 const initialState: DirectoryState = {
     alumni: [],
+    selectedAlumni: null,
     total: 0,
     pages: 0,
     currentPage: 1,
-    filters: {},
+    filters: {
+        page: 1,
+        page_size: 12,
+    },
     loading: false,
     error: null,
 };
@@ -38,7 +43,7 @@ export const searchDirectory = createAsyncThunk(
         try {
             const params = new URLSearchParams();
             if (filters.search) params.append('search', filters.search);
-            if (filters.batch) params.append('batch', filters.batch.toString());
+            if (filters.batch) params.append('batch', filters.batch);
             if (filters.profession) params.append('profession', filters.profession);
             if (filters.country) params.append('country', filters.country);
             if (filters.city) params.append('city', filters.city);
@@ -54,6 +59,19 @@ export const searchDirectory = createAsyncThunk(
     }
 );
 
+export const fetchAlumniById = createAsyncThunk(
+    'directory/fetchById',
+    async (id: string, { rejectWithValue }) => {
+        try {
+            const { data } = await api.get(`/directory/${id}/`);
+            return data;
+        } catch (error: unknown) {
+            const err = error as { response?: { data?: { detail?: string } } };
+            return rejectWithValue(err.response?.data?.detail || 'Failed to fetch alumni');
+        }
+    }
+);
+
 const directorySlice = createSlice({
     name: 'directory',
     initialState,
@@ -62,8 +80,11 @@ const directorySlice = createSlice({
             state.filters = { ...state.filters, ...action.payload };
         },
         clearFilters: (state) => {
-            state.filters = {};
+            state.filters = initialState.filters;
         },
+        clearSelectedAlumni: (state) => {
+            state.selectedAlumni = null;
+        }
     },
     extraReducers: (builder) => {
         builder
@@ -82,9 +103,21 @@ const directorySlice = createSlice({
             .addCase(searchDirectory.rejected, (state, action) => {
                 state.loading = false;
                 state.error = action.payload as string;
+            })
+            .addCase(fetchAlumniById.pending, (state) => {
+                state.loading = true;
+                state.error = null;
+            })
+            .addCase(fetchAlumniById.fulfilled, (state, action: PayloadAction<AlumniProfile>) => {
+                state.loading = false;
+                state.selectedAlumni = action.payload;
+            })
+            .addCase(fetchAlumniById.rejected, (state, action) => {
+                state.loading = false;
+                state.error = action.payload as string;
             });
     },
 });
 
-export const { setFilters, clearFilters } = directorySlice.actions;
+export const { setFilters, clearFilters, clearSelectedAlumni } = directorySlice.actions;
 export default directorySlice.reducer;
