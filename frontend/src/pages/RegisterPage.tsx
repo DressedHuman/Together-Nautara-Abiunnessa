@@ -2,6 +2,10 @@ import { useState, FormEvent } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAppDispatch, useAppSelector } from '../hooks/useRedux';
 import { register, clearError } from '../features/auth/authSlice';
+import { validateRegisterForm } from '../utils/validation';
+import Input from '../components/common/Input';
+import Button from '../components/common/Button';
+import Alert from '../components/common/Alert';
 
 export default function RegisterPage() {
     const dispatch = useAppDispatch();
@@ -14,85 +18,114 @@ export default function RegisterPage() {
         password: '',
         password_confirm: '',
     });
+    const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+    const [successMessage, setSuccessMessage] = useState('');
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const { name, value } = e.target;
+        setFormData((prev) => ({ ...prev, [name]: value }));
+        if (fieldErrors[name]) {
+            setFieldErrors((prev) => ({ ...prev, [name]: '' }));
+        }
+    };
 
     const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
         dispatch(clearError());
+        setSuccessMessage('');
+
+        const validation = validateRegisterForm(formData);
+        if (!validation.isValid) {
+            setFieldErrors(validation.errors);
+            return;
+        }
 
         const result = await dispatch(register(formData));
         if (register.fulfilled.match(result)) {
-            navigate('/login');
+            setSuccessMessage('Registration successful! Please check your email for verification.');
+            setTimeout(() => navigate('/login'), 2000);
         }
     };
 
     return (
-        <div className="max-w-md mx-auto">
-            <h1 className="text-3xl font-bold text-center text-gray-900 mb-8">Register</h1>
+        <div className="min-h-[80vh] flex items-center justify-center px-4 py-8">
+            <div className="w-full max-w-md">
+                <h1 className="text-3xl font-bold text-center text-gray-900 mb-2">Join Together Nautara</h1>
+                <p className="text-center text-gray-600 mb-8">Create your alumni account</p>
 
-            <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow p-6">
-                {error && (
-                    <div className="bg-red-50 text-red-700 p-3 rounded mb-4">{error}</div>
-                )}
+                <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-lg p-6 sm:p-8">
+                    {error && (
+                        <Alert
+                            type="error"
+                            message={error}
+                            onClose={() => dispatch(clearError())}
+                        />
+                    )}
 
-                <div className="mb-4">
-                    <label className="block text-gray-700 mb-2">Email</label>
-                    <input
+                    {successMessage && (
+                        <Alert type="success" message={successMessage} />
+                    )}
+
+                    <Input
+                        id="email"
+                        name="email"
                         type="email"
+                        label="Email Address"
                         value={formData.email}
-                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                        className="w-full border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        required
+                        onChange={handleChange}
+                        error={fieldErrors.email}
+                        placeholder="you@example.com"
+                        autoComplete="email"
                     />
-                </div>
 
-                <div className="mb-4">
-                    <label className="block text-gray-700 mb-2">Phone</label>
-                    <input
+                    <Input
+                        id="phone"
+                        name="phone"
                         type="tel"
+                        label="Phone Number"
                         value={formData.phone}
-                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                        className="w-full border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        required
+                        onChange={handleChange}
+                        error={fieldErrors.phone}
+                        placeholder="+880 1XXX-XXXXXX"
+                        autoComplete="tel"
                     />
-                </div>
 
-                <div className="mb-4">
-                    <label className="block text-gray-700 mb-2">Password</label>
-                    <input
+                    <Input
+                        id="password"
+                        name="password"
                         type="password"
+                        label="Password"
                         value={formData.password}
-                        onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                        className="w-full border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        required
+                        onChange={handleChange}
+                        error={fieldErrors.password}
+                        placeholder="At least 8 characters"
+                        autoComplete="new-password"
                     />
-                </div>
 
-                <div className="mb-6">
-                    <label className="block text-gray-700 mb-2">Confirm Password</label>
-                    <input
+                    <Input
+                        id="password_confirm"
+                        name="password_confirm"
                         type="password"
+                        label="Confirm Password"
                         value={formData.password_confirm}
-                        onChange={(e) => setFormData({ ...formData, password_confirm: e.target.value })}
-                        className="w-full border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        required
+                        onChange={handleChange}
+                        error={fieldErrors.password_confirm}
+                        placeholder="Confirm your password"
+                        autoComplete="new-password"
                     />
-                </div>
 
-                <button
-                    type="submit"
-                    disabled={loading}
-                    className="w-full bg-indigo-600 text-white py-2 rounded-lg hover:bg-indigo-700 disabled:opacity-50"
-                >
-                    {loading ? 'Registering...' : 'Register'}
-                </button>
+                    <Button type="submit" loading={loading} className="w-full mt-2">
+                        Create Account
+                    </Button>
 
-                <p className="text-center mt-4 text-gray-600">
-                    Already have an account?{' '}
-                    <Link to="/login" className="text-indigo-600 hover:underline">
-                        Login
-                    </Link>
-                </p>
-            </form>
+                    <p className="text-center mt-6 text-gray-600">
+                        Already have an account?{' '}
+                        <Link to="/login" className="text-indigo-600 font-medium hover:underline">
+                            Sign In
+                        </Link>
+                    </p>
+                </form>
+            </div>
         </div>
     );
 }
