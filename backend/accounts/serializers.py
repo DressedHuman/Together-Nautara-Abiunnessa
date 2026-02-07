@@ -8,6 +8,7 @@ class RegisterSerializer(serializers.ModelSerializer):
     """Serializer for user registration."""
     password = serializers.CharField(write_only=True, min_length=8)
     password_confirm = serializers.CharField(write_only=True)
+    username = serializers.CharField(required=False, allow_blank=True)
     
     class Meta:
         model = User
@@ -20,6 +21,21 @@ class RegisterSerializer(serializers.ModelSerializer):
     
     def create(self, validated_data):
         validated_data.pop('password_confirm')
+        
+        # Generate username from email if not provided
+        if not validated_data.get('username'):
+            email = validated_data.get('email', '')
+            base_username = email.split('@')[0]
+            username = base_username
+            
+            # Ensure uniqueness
+            counter = 1
+            while User.objects.filter(username=username).exists():
+                username = f"{base_username}{counter}"
+                counter += 1
+            
+            validated_data['username'] = username
+            
         user = User.objects.create_user(**validated_data)
         return user
 
