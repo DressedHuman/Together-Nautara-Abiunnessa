@@ -1,10 +1,13 @@
 from rest_framework import status
-from rest_framework.views import APIView
-from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenRefreshView
 
+from .emails import send_otp_email
 from .models import User
 from .serializers import (
     RegisterSerializer,
@@ -12,136 +15,174 @@ from .serializers import (
     LoginPhoneSerializer,
     OTPRequestSerializer,
     OTPVerifySerializer,
+    PasswordResetConfirmSerializer,
+    PasswordChangeSerializer,
     UserSerializer,
 )
+
+GENERIC_OTP_MESSAGE = 'If an account matches, we have emailed it a 6-digit code.'
 
 
 def get_tokens_for_user(user):
     """Generate JWT tokens for a user."""
     refresh = RefreshToken.for_user(user)
-    return {
-        'refresh': str(refresh),
-        'access': str(refresh.access_token),
-    }
+    return {'refresh': str(refresh), 'access': str(refresh.access_token)}
+
+
+def auth_response(user, **extra):
+    return Response({**get_tokens_for_user(user), 'user': UserSerializer(user).data, **extra})
+
+
+def revoke_all_tokens(user):
+    """Blacklist every outstanding refresh token (e.g. after a password change)."""
+    for token in OutstandingToken.objects.filter(user=user):
+        BlacklistedToken.objects.get_or_create(token=token)
 
 
 class RegisterView(APIView):
-    """User registration endpoint."""
+    """Create an account and email a verification code."""
+
     permission_classes = [AllowAny]
-    
+    throttle_scope = 'register'
+
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
-        
-        # Generate OTP for verification
-        otp = user.generate_otp()
-        
-        # In production, send OTP via email/SMS here
-        # For now, return it in response (remove in production)
-        
+        send_otp_email(user, user.generate_otp('verify'), 'verify')
         return Response({
-            'message': 'Registration successful. Please verify your account.',
-            'user': UserSerializer(user).data,
-            'otp': otp,  # Remove in production
+            'message': 'Account created. We emailed you a 6-digit code to verify it.',
+            'email': user.email,
         }, status=status.HTTP_201_CREATED)
 
 
-class LoginEmailView(APIView):
+class _LoginView(APIView):
+    permission_classes = [AllowAny]
+    throttle_scope = 'login'
+    serializer_class = None
+
+    def post(self, request):
+        serializer = self.serializer_class(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.validated_data['user']
+        if not user.is_verified:
+            # The password was right, so it's safe to say why sign-in stopped.
+            if user.can_resend_otp():
+                send_otp_email(user, user.generate_otp('verify'), 'verify')
+            return Response({
+                'detail': 'Please verify your email first. We sent you a code.',
+                'code': 'unverified',
+                'email': user.email,
+            }, status=status.HTTP_403_FORBIDDEN)
+        return auth_response(user)
+
+
+class LoginEmailView(_LoginView):
     """Login with email and password."""
-    permission_classes = [AllowAny]
-    
-    def post(self, request):
-        serializer = LoginEmailSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        
-        user = serializer.validated_data['user']
-        tokens = get_tokens_for_user(user)
-        
-        return Response({
-            'access': tokens['access'],
-            'refresh': tokens['refresh'],
-            'user': UserSerializer(user).data,
-        })
+
+    serializer_class = LoginEmailSerializer
 
 
-class LoginPhoneView(APIView):
+class LoginPhoneView(_LoginView):
     """Login with phone and password."""
-    permission_classes = [AllowAny]
-    
-    def post(self, request):
-        serializer = LoginPhoneSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        
-        user = serializer.validated_data['user']
-        tokens = get_tokens_for_user(user)
-        
-        return Response({
-            'access': tokens['access'],
-            'refresh': tokens['refresh'],
-            'user': UserSerializer(user).data,
-        })
+
+    serializer_class = LoginPhoneSerializer
 
 
 class OTPRequestView(APIView):
-    """Request OTP for verification."""
+    """Send a verification or password-reset code."""
+
     permission_classes = [AllowAny]
-    
+    throttle_scope = 'otp'
+    fixed_purpose = None
+
     def post(self, request):
         serializer = OTPRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        
-        user = serializer.validated_data['user']
-        otp = user.generate_otp()
-        
-        # In production, send OTP via email/SMS here
-        
-        return Response({
-            'message': 'OTP sent successfully',
-            'otp': otp,  # Remove in production
-        })
+        purpose = self.fixed_purpose or serializer.validated_data['purpose']
+        user = User.objects.filter(
+            email__iexact=serializer.validated_data['email'].strip(), is_active=True
+        ).first()
+        wanted = user and not (purpose == 'verify' and user.is_verified)
+        if wanted and user.can_resend_otp():
+            send_otp_email(user, user.generate_otp(purpose), purpose)
+        return Response({'message': GENERIC_OTP_MESSAGE})
 
 
 class OTPVerifyView(APIView):
-    """Verify OTP and mark user as verified."""
+    """Verify the emailed code, mark the account verified and sign in."""
+
     permission_classes = [AllowAny]
-    
+    throttle_scope = 'otp'
+
     def post(self, request):
         serializer = OTPVerifySerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        
         user = serializer.validated_data['user']
-        user.is_verified = True
-        user.save(update_fields=['is_verified'])
-        
-        tokens = get_tokens_for_user(user)
-        
-        return Response({
-            'message': 'Account verified successfully',
-            'access': tokens['access'],
-            'refresh': tokens['refresh'],
-            'user': UserSerializer(user).data,
-        })
+        if not user.is_verified:
+            user.is_verified = True
+            user.save(update_fields=['is_verified'])
+        if not user.is_active:
+            return Response({'detail': 'Account is disabled.'}, status=status.HTTP_403_FORBIDDEN)
+        return auth_response(user, message='Account verified.')
+
+
+class PasswordResetRequestView(OTPRequestView):
+    """Alias of request-otp with purpose=reset."""
+
+    fixed_purpose = 'reset'
+
+
+class PasswordResetConfirmView(APIView):
+    permission_classes = [AllowAny]
+    throttle_scope = 'otp'
+
+    def post(self, request):
+        serializer = PasswordResetConfirmSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.validated_data['user']
+        user.set_password(serializer.validated_data['new_password'])
+        user.is_verified = True  # the code proved they own the address
+        user.save(update_fields=['password', 'is_verified'])
+        revoke_all_tokens(user)
+        return Response({'message': 'Password updated. You can sign in now.'})
+
+
+class PasswordChangeView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = PasswordChangeSerializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        request.user.set_password(serializer.validated_data['new_password'])
+        request.user.save(update_fields=['password'])
+        revoke_all_tokens(request.user)
+        return auth_response(request.user, message='Password changed.')
+
+
+class RefreshView(TokenRefreshView):
+    throttle_scope = 'login'
 
 
 class LogoutView(APIView):
-    """Logout and blacklist refresh token."""
-    permission_classes = [IsAuthenticated]
-    
+    """Blacklist the given refresh token."""
+
+    permission_classes = [AllowAny]
+
     def post(self, request):
-        try:
-            refresh_token = request.data.get('refresh')
-            if refresh_token:
-                token = RefreshToken(refresh_token)
-                token.blacklist()
-            return Response({'message': 'Logout successful'})
-        except Exception:
-            return Response({'message': 'Logout successful'})
+        refresh_token = request.data.get('refresh')
+        if refresh_token:
+            try:
+                RefreshToken(refresh_token).blacklist()
+            except TokenError:
+                pass
+        return Response({'message': 'Signed out.'})
 
 
 class MeView(APIView):
     """Get current user details."""
+
     permission_classes = [IsAuthenticated]
-    
+
     def get(self, request):
         return Response(UserSerializer(request.user).data)

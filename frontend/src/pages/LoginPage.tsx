@@ -1,101 +1,87 @@
-import { useState, FormEvent } from 'react';
-import { useNavigate, Link, useLocation } from 'react-router-dom';
-import { useAppDispatch, useAppSelector } from '../hooks/useRedux';
-import { login, clearError } from '../features/auth/authSlice';
-import { validateLoginForm } from '../utils/validation';
-import Input from '../components/common/Input';
-import Button from '../components/common/Button';
-import Alert from '../components/common/Alert';
+import { useState, type FormEvent } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useAppDispatch } from '../hooks/useRedux';
+import { signedIn } from '../features/auth/authSlice';
+import { authService } from '../services';
+import { parseError } from '../lib/api';
+import AuthShell from '../components/layout/AuthShell';
+import { Alert, Button, Input, PasswordInput } from '../components/ui';
+import { cx } from '../lib/utils';
 
 export default function LoginPage() {
     const dispatch = useAppDispatch();
     const navigate = useNavigate();
     const location = useLocation();
-    const { loading, error } = useAppSelector((state) => state.auth);
+    const [method, setMethod] = useState<'email' | 'phone'>('email');
+    const [identifier, setIdentifier] = useState('');
+    const [password, setPassword] = useState('');
+    const [error, setError] = useState('');
+    const [loading, setLoading] = useState(false);
+    const notice = (location.state as { notice?: string } | null)?.notice;
 
-    const [formData, setFormData] = useState({
-        email: '',
-        password: '',
-    });
-    const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-
-    const from = location.state?.from?.pathname || '/profile';
-
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const { name, value } = e.target;
-        setFormData((prev) => ({ ...prev, [name]: value }));
-        if (fieldErrors[name]) {
-            setFieldErrors((prev) => ({ ...prev, [name]: '' }));
-        }
-    };
-
-    const handleSubmit = async (e: FormEvent) => {
+    const submit = async (e: FormEvent) => {
         e.preventDefault();
-        dispatch(clearError());
-
-        const validation = validateLoginForm(formData);
-        if (!validation.isValid) {
-            setFieldErrors(validation.errors);
+        setError('');
+        if (!identifier.trim() || !password) {
+            setError(`Enter your ${method} and password.`);
             return;
         }
-
-        const result = await dispatch(login({ email: formData.email, password: formData.password }));
-        if (login.fulfilled.match(result)) {
-            navigate(from, { replace: true });
+        setLoading(true);
+        try {
+            const data = method === 'email'
+                ? await authService.loginEmail(identifier.trim(), password)
+                : await authService.loginPhone(identifier.trim(), password);
+            dispatch(signedIn(data));
+        } catch (err) {
+            const { message, data } = parseError(err);
+            if (data.code === 'unverified') {
+                navigate('/verify', { state: { email: data.email, sent: true } });
+                return;
+            }
+            setError(message);
+        } finally {
+            setLoading(false);
         }
     };
 
     return (
-        <div className="min-h-[80vh] flex items-center justify-center px-4">
-            <div className="w-full max-w-md">
-                <h1 className="text-3xl font-bold text-center text-gray-900 mb-2">Welcome Back</h1>
-                <p className="text-center text-gray-600 mb-8">Sign in to your account</p>
+        <AuthShell
+            title="Welcome back"
+            subtitle="Sign in to update your profile and connect with your batchmates."
+            footer={<>New here? <Link to="/register" className="link">Create an account</Link></>}
+        >
+            <form onSubmit={submit} className="space-y-5" noValidate>
+                {notice && <Alert type="success">{notice}</Alert>}
+                {error && <Alert type="error">{error}</Alert>}
 
-                <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-lg p-6 sm:p-8">
-                    {error && (
-                        <Alert
-                            type="error"
-                            message={error}
-                            onClose={() => dispatch(clearError())}
-                        />
-                    )}
+                <div className="grid grid-cols-2 rounded-xl bg-ink-50 p-1 text-sm font-medium" role="tablist" aria-label="Sign in with">
+                    {(['email', 'phone'] as const).map((m) => (
+                        <button
+                            key={m}
+                            type="button"
+                            role="tab"
+                            aria-selected={method === m}
+                            onClick={() => { setMethod(m); setIdentifier(''); setError(''); }}
+                            className={cx('rounded-lg py-2 transition', method === m ? 'bg-white text-ink-950 shadow-sm' : 'text-muted hover:text-ink-900')}
+                        >
+                            {m === 'email' ? 'Email' : 'Phone'}
+                        </button>
+                    ))}
+                </div>
 
-                    <Input
-                        id="email"
-                        name="email"
-                        type="email"
-                        label="Email Address"
-                        value={formData.email}
-                        onChange={handleChange}
-                        error={fieldErrors.email}
-                        placeholder="you@example.com"
-                        autoComplete="email"
-                    />
-
-                    <Input
-                        id="password"
-                        name="password"
-                        type="password"
-                        label="Password"
-                        value={formData.password}
-                        onChange={handleChange}
-                        error={fieldErrors.password}
-                        placeholder="••••••••"
-                        autoComplete="current-password"
-                    />
-
-                    <Button type="submit" loading={loading} className="w-full mt-2">
-                        Sign In
-                    </Button>
-
-                    <p className="text-center mt-6 text-gray-600">
-                        Don't have an account?{' '}
-                        <Link to="/register" className="text-indigo-600 font-medium hover:underline">
-                            Create Account
-                        </Link>
-                    </p>
-                </form>
-            </div>
-        </div>
+                {method === 'email' ? (
+                    <Input label="Email" type="email" autoComplete="email" value={identifier} onChange={(e) => setIdentifier(e.target.value)} placeholder="you@example.com" autoFocus />
+                ) : (
+                    <Input label="Phone number" type="tel" autoComplete="tel" value={identifier} onChange={(e) => setIdentifier(e.target.value)} placeholder="01XXXXXXXXX" autoFocus />
+                )}
+                <div>
+                    <PasswordInput label="Password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+                    <div className="mt-2 text-right">
+                        <Link to="/forgot-password" className="text-sm text-muted hover:text-ink-900">Forgot password?</Link>
+                    </div>
+                </div>
+                <Button type="submit" loading={loading} className="w-full" size="lg">Sign in</Button>
+            </form>
+        </AuthShell>
     );
 }

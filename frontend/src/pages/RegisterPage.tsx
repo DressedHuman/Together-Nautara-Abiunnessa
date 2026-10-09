@@ -1,131 +1,69 @@
-import { useState, FormEvent } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { useAppDispatch, useAppSelector } from '../hooks/useRedux';
-import { register, clearError } from '../features/auth/authSlice';
-import { validateRegisterForm } from '../utils/validation';
-import Input from '../components/common/Input';
-import Button from '../components/common/Button';
-import Alert from '../components/common/Alert';
+import { useState, type FormEvent } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { authService } from '../services';
+import { parseError } from '../lib/api';
+import AuthShell from '../components/layout/AuthShell';
+import { Alert, Button, Input, PasswordInput } from '../components/ui';
+
+const EMPTY = { email: '', phone: '', password: '', password_confirm: '' };
+
+function validate(form: typeof EMPTY) {
+    const errors: Record<string, string> = {};
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) errors.email = 'Enter a valid email address.';
+    if (!/^\+?[\d\s\-()]{10,18}$/.test(form.phone.trim())) errors.phone = 'Enter a valid phone number.';
+    if (form.password.length < 8) errors.password = 'Use at least 8 characters.';
+    else if (/^\d+$/.test(form.password)) errors.password = 'Mix in some letters, not only numbers.';
+    if (form.password !== form.password_confirm) errors.password_confirm = 'Passwords do not match.';
+    return errors;
+}
 
 export default function RegisterPage() {
-    const dispatch = useAppDispatch();
     const navigate = useNavigate();
-    const { loading, error } = useAppSelector((state) => state.auth);
+    const [form, setForm] = useState(EMPTY);
+    const [errors, setErrors] = useState<Record<string, string>>({});
+    const [error, setError] = useState('');
+    const [loading, setLoading] = useState(false);
 
-    const [formData, setFormData] = useState({
-        email: '',
-        phone: '',
-        password: '',
-        password_confirm: '',
-    });
-    const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-    const [successMessage, setSuccessMessage] = useState('');
-
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const { name, value } = e.target;
-        setFormData((prev) => ({ ...prev, [name]: value }));
-        if (fieldErrors[name]) {
-            setFieldErrors((prev) => ({ ...prev, [name]: '' }));
-        }
+    const set = (key: keyof typeof EMPTY) => (e: React.ChangeEvent<HTMLInputElement>) => {
+        setForm((f) => ({ ...f, [key]: e.target.value }));
+        if (errors[key]) setErrors((x) => ({ ...x, [key]: '' }));
     };
 
-    const handleSubmit = async (e: FormEvent) => {
+    const submit = async (e: FormEvent) => {
         e.preventDefault();
-        dispatch(clearError());
-        setSuccessMessage('');
-
-        const validation = validateRegisterForm(formData);
-        if (!validation.isValid) {
-            setFieldErrors(validation.errors);
-            return;
-        }
-
-        const result = await dispatch(register(formData));
-        if (register.fulfilled.match(result)) {
-            setSuccessMessage('Registration successful! Please check your email for verification.');
-            setTimeout(() => navigate('/login'), 2000);
+        setError('');
+        const found = validate(form);
+        setErrors(found);
+        if (Object.keys(found).length) return;
+        setLoading(true);
+        try {
+            const res = await authService.register({ ...form, email: form.email.trim(), phone: form.phone.trim() });
+            navigate('/verify', { state: { email: res.email, sent: true } });
+        } catch (err) {
+            const parsed = parseError(err);
+            setErrors(parsed.fields);
+            setError(parsed.message);
+        } finally {
+            setLoading(false);
         }
     };
 
     return (
-        <div className="min-h-[80vh] flex items-center justify-center px-4 py-8">
-            <div className="w-full max-w-md">
-                <h1 className="text-3xl font-bold text-center text-gray-900 mb-2">Join Together Nautara</h1>
-                <p className="text-center text-gray-600 mb-8">Create your alumni account</p>
-
-                <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-lg p-6 sm:p-8">
-                    {error && (
-                        <Alert
-                            type="error"
-                            message={error}
-                            onClose={() => dispatch(clearError())}
-                        />
-                    )}
-
-                    {successMessage && (
-                        <Alert type="success" message={successMessage} />
-                    )}
-
-                    <Input
-                        id="email"
-                        name="email"
-                        type="email"
-                        label="Email Address"
-                        value={formData.email}
-                        onChange={handleChange}
-                        error={fieldErrors.email}
-                        placeholder="you@example.com"
-                        autoComplete="email"
-                    />
-
-                    <Input
-                        id="phone"
-                        name="phone"
-                        type="tel"
-                        label="Phone Number"
-                        value={formData.phone}
-                        onChange={handleChange}
-                        error={fieldErrors.phone}
-                        placeholder="+880 1XXX-XXXXXX"
-                        autoComplete="tel"
-                    />
-
-                    <Input
-                        id="password"
-                        name="password"
-                        type="password"
-                        label="Password"
-                        value={formData.password}
-                        onChange={handleChange}
-                        error={fieldErrors.password}
-                        placeholder="At least 8 characters"
-                        autoComplete="new-password"
-                    />
-
-                    <Input
-                        id="password_confirm"
-                        name="password_confirm"
-                        type="password"
-                        label="Confirm Password"
-                        value={formData.password_confirm}
-                        onChange={handleChange}
-                        error={fieldErrors.password_confirm}
-                        placeholder="Confirm your password"
-                        autoComplete="new-password"
-                    />
-
-                    <Button type="submit" loading={loading} className="w-full mt-2">
-                        Create Account
-                    </Button>
-
-                    <p className="text-center mt-6 text-gray-600">
-                        Already have an account?{' '}
-                        <Link to="/login" className="text-indigo-600 font-medium hover:underline">
-                            Sign In
-                        </Link>
-                    </p>
-                </form>
-            </div>
-        </div>
+        <AuthShell
+            title="Join the alumni network"
+            subtitle="Create your account, confirm your email, then tell us your batch. The committee verifies every member."
+            footer={<>Already a member? <Link to="/login" className="link">Sign in</Link></>}
+        >
+            <form onSubmit={submit} className="space-y-5" noValidate>
+                {error && <Alert type="error">{error}</Alert>}
+                <Input label="Email" type="email" autoComplete="email" value={form.email} onChange={set('email')} error={errors.email} placeholder="you@example.com" />
+                <Input label="Phone number" type="tel" autoComplete="tel" value={form.phone} onChange={set('phone')} error={errors.phone} placeholder="01XXXXXXXXX" hint="Used only by the committee. Never shown publicly." />
+                <div className="grid gap-5 sm:grid-cols-2">
+                    <PasswordInput label="Password" autoComplete="new-password" value={form.password} onChange={set('password')} error={errors.password} />
+                    <PasswordInput label="Confirm password" autoComplete="new-password" value={form.password_confirm} onChange={set('password_confirm')} error={errors.password_confirm} />
+                </div>
+                <Button type="submit" loading={loading} className="w-full" size="lg">Create account</Button>
+            </form>
+        </AuthShell>
     );
 }

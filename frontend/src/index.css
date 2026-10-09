@@ -1,1 +1,85 @@
 @import "tailwindcss";
+
+@theme {
+    --font-sans: "Inter", "Hind Siliguri", ui-sans-serif, system-ui, sans-serif;
+    --font-display: "Fraunces", "Hind Siliguri", Georgia, serif;
+    --font-bangla: "Hind Siliguri", "Inter", sans-serif;
+
+    /* School navy */
+    --color-ink-50: #f3f5fb;
+    --color-ink-100: #e4e9f5;
+    --color-ink-200: #c6d0ea;
+    --color-ink-300: #9aaad6;
+    --color-ink-400: #6b80bd;
+    --color-ink-500: #4a5fa3;
+    --color-ink-600: #374a88;
+    --color-ink-700: #2b3a6e;
+    --color-ink-800: #1f2b54;
+    --color-ink-900: #141d3b;
+    --color-ink-950: #0c1228;
+
+    /* Warm gold accent */
+    --color-gold-50: #fbf6ea;
+    --color-gold-100: #f5e9c8;
+    --color-gold-200: #ecd394;
+    --color-gold-300: #e0b95e;
+    --color-gold-400: #d4a23b;
+    --color-gold-500: #b9862a;
+    --color-gold-600: #976a21;
+    --color-gold-700: #75511d;
+
+    --color-paper: #faf8f3;
+    --color-line: #e8e3d8;
+    --color-muted: #6b6f7d;
+}
+
+@layer base {
+    html {
+        -webkit-text-size-adjust: 100%;
+        scroll-behavior: smooth;
+    }
+    body {
+        @apply bg-paper text-ink-950 antialiased;
+        font-feature-settings: "cv11", "ss01";
+    }
+    h1, h2, h3 {
+        @apply font-display tracking-tight text-ink-950;
+        font-optical-sizing: auto;
+    }
+    ::selection {
+        @apply bg-gold-200 text-ink-950;
+    }
+    :focus-visible {
+        @apply outline-2 outline-offset-2 outline-ink-600;
+    }
+    @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after {
+            animation-duration: 0.01ms !important;
+            transition-duration: 0.01ms !important;
+            scroll-behavior: auto !important;
+        }
+    }
+}
+
+@layer components {
+    .card {
+        @apply rounded-2xl border border-line bg-white shadow-[0_1px_2px_rgba(12,18,40,0.04)];
+    }
+    .eyebrow {
+        @apply text-xs font-semibold uppercase tracking-[0.18em] text-gold-600;
+    }
+    .bn {
+        font-family: var(--font-bangla);
+    }
+    .link {
+        @apply font-medium text-ink-700 underline decoration-ink-200 underline-offset-4 transition hover:decoration-ink-600;
+    }
+}
+
+@keyframes rise {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: none; }
+}
+.animate-rise {
+    animation: rise 0.35s ease-out both;
+}

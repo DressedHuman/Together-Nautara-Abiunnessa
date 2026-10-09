@@ -9,6 +9,7 @@ class ApprovalLog(models.Model):
     STATUS_CHOICES = [
         ('approved', 'Approved'),
         ('rejected', 'Rejected'),
+        ('recommended', 'Recommended by coordinator'),
     ]
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

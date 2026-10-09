@@ -1,27 +1,32 @@
+import type { ReactNode } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAppSelector } from '../../hooks/useRedux';
+import { PageSpinner } from '../ui';
+import type { Role } from '../../types';
 
 interface ProtectedRouteProps {
-    children: React.ReactNode;
+    children: ReactNode;
+    /** false = only for signed-out visitors (login, register). */
     requireAuth?: boolean;
-    redirectTo?: string;
+    roles?: Role[];
 }
 
-export default function ProtectedRoute({
-    children,
-    requireAuth = true,
-    redirectTo = '/login',
-}: ProtectedRouteProps) {
+export default function ProtectedRoute({ children, requireAuth = true, roles }: ProtectedRouteProps) {
     const location = useLocation();
-    const { isAuthenticated } = useAppSelector((state) => state.auth);
+    const { user, status } = useAppSelector((state) => state.auth);
 
-    if (requireAuth && !isAuthenticated) {
-        return <Navigate to={redirectTo} state={{ from: location }} replace />;
+    if (status === 'checking') return <PageSpinner />;
+
+    if (requireAuth && !user) {
+        return <Navigate to="/login" state={{ from: location.pathname + location.search }} replace />;
     }
-
-    if (!requireAuth && isAuthenticated) {
-        return <Navigate to="/profile" replace />;
+    if (!requireAuth && user) {
+        const from = (location.state as { from?: string } | null)?.from;
+        const target = from && from.startsWith('/') && !from.startsWith('//') ? from : user.has_profile || user.role === 'committee' ? '/dashboard' : '/profile/edit';
+        return <Navigate to={target} replace />;
     }
-
+    if (roles && user && !roles.includes(user.role)) {
+        return <Navigate to="/dashboard" replace />;
+    }
     return <>{children}</>;
 }

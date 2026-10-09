@@ -1,110 +1,50 @@
 import { createSlice, createAsyncThunk, type PayloadAction } from '@reduxjs/toolkit';
-import api from '../../lib/api';
+import { alumniService } from '../../services';
 import type { AlumniProfile } from '../../types';
+import { logout } from '../auth/authSlice';
 
 interface AlumniState {
     profile: AlumniProfile | null;
-    loading: boolean;
-    error: string | null;
+    /** 'missing' means the user hasn't created a profile yet. */
+    status: 'idle' | 'loading' | 'loaded' | 'missing' | 'error';
 }
 
-const initialState: AlumniState = {
-    profile: null,
-    loading: false,
-    error: null,
-};
+const initialState: AlumniState = { profile: null, status: 'idle' };
 
-export const fetchMyProfile = createAsyncThunk(
-    'alumni/fetchMyProfile',
-    async (_, { rejectWithValue }) => {
-        try {
-            const { data } = await api.get('/alumni/me/');
-            return data;
-        } catch (error: unknown) {
-            const err = error as { response?: { data?: { detail?: string } } };
-            return rejectWithValue(err.response?.data?.detail || 'Failed to fetch profile');
-        }
+export const fetchMyProfile = createAsyncThunk('alumni/fetchMyProfile', async (_, { rejectWithValue }) => {
+    try {
+        return await alumniService.mine();
+    } catch (error) {
+        const status = (error as { response?: { status?: number } }).response?.status;
+        return rejectWithValue(status === 404 ? 'missing' : 'error');
     }
-);
-
-export const createProfile = createAsyncThunk(
-    'alumni/createProfile',
-    async (profileData: FormData, { rejectWithValue }) => {
-        try {
-            const { data } = await api.post('/alumni/me/', profileData, {
-                headers: { 'Content-Type': 'multipart/form-data' },
-            });
-            return data;
-        } catch (error: unknown) {
-            const err = error as { response?: { data?: { detail?: string } } };
-            return rejectWithValue(err.response?.data?.detail || 'Failed to create profile');
-        }
-    }
-);
-
-export const updateProfile = createAsyncThunk(
-    'alumni/updateProfile',
-    async (profileData: FormData, { rejectWithValue }) => {
-        try {
-            const { data } = await api.put('/alumni/me/', profileData, {
-                headers: { 'Content-Type': 'multipart/form-data' },
-            });
-            return data;
-        } catch (error: unknown) {
-            const err = error as { response?: { data?: { detail?: string } } };
-            return rejectWithValue(err.response?.data?.detail || 'Failed to update profile');
-        }
-    }
-);
+});
 
 const alumniSlice = createSlice({
     name: 'alumni',
     initialState,
     reducers: {
-        clearProfile: (state) => {
-            state.profile = null;
+        profileSaved: (state, action: PayloadAction<AlumniProfile>) => {
+            state.profile = action.payload;
+            state.status = 'loaded';
         },
     },
     extraReducers: (builder) => {
         builder
             .addCase(fetchMyProfile.pending, (state) => {
-                state.loading = true;
-                state.error = null;
+                if (state.status !== 'loaded') state.status = 'loading';
             })
-            .addCase(fetchMyProfile.fulfilled, (state, action: PayloadAction<AlumniProfile>) => {
-                state.loading = false;
+            .addCase(fetchMyProfile.fulfilled, (state, action) => {
                 state.profile = action.payload;
+                state.status = 'loaded';
             })
             .addCase(fetchMyProfile.rejected, (state, action) => {
-                state.loading = false;
-                state.error = action.payload as string;
+                state.profile = null;
+                state.status = action.payload === 'missing' ? 'missing' : 'error';
             })
-            .addCase(createProfile.pending, (state) => {
-                state.loading = true;
-                state.error = null;
-            })
-            .addCase(createProfile.fulfilled, (state, action: PayloadAction<AlumniProfile>) => {
-                state.loading = false;
-                state.profile = action.payload;
-            })
-            .addCase(createProfile.rejected, (state, action) => {
-                state.loading = false;
-                state.error = action.payload as string;
-            })
-            .addCase(updateProfile.pending, (state) => {
-                state.loading = true;
-                state.error = null;
-            })
-            .addCase(updateProfile.fulfilled, (state, action: PayloadAction<AlumniProfile>) => {
-                state.loading = false;
-                state.profile = action.payload;
-            })
-            .addCase(updateProfile.rejected, (state, action) => {
-                state.loading = false;
-                state.error = action.payload as string;
-            });
+            .addCase(logout.fulfilled, () => initialState);
     },
 });
 
-export const { clearProfile } = alumniSlice.actions;
+export const { profileSaved } = alumniSlice.actions;
 export default alumniSlice.reducer;

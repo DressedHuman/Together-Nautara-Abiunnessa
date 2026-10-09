@@ -1,96 +1,65 @@
 from rest_framework import status
-from rest_framework.views import APIView
+from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated, AllowAny
-from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.views import APIView
 
+from core.permissions import IsVerifiedUser, is_committee
+from directory.views import public_profile_response
 from .models import AlumniProfile
-from .serializers import (
-    AlumniProfileSerializer,
-    AlumniProfileCreateSerializer,
-    AlumniProfileUpdateSerializer,
-)
-from core.permissions import IsVerifiedUser
+from .serializers import AlumniProfileSerializer, AlumniProfileWriteSerializer, AlumniReviewSerializer
 
 
 class MyProfileView(APIView):
-    """Get or create current user's alumni profile."""
-    permission_classes = [IsAuthenticated]
-    parser_classes = [MultiPartParser, FormParser]
-    
+    """Get, create or update the signed-in user's alumni profile."""
+
+    permission_classes = [IsVerifiedUser]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+
+    def _profile(self, request):
+        return AlumniProfile.objects.select_related('batch').filter(user=request.user).first()
+
     def get(self, request):
-        try:
-            profile = request.user.alumni_profile
-            serializer = AlumniProfileSerializer(profile)
-            return Response(serializer.data)
-        except AlumniProfile.DoesNotExist:
-            return Response(
-                {'detail': 'Profile not found'},
-                status=status.HTTP_404_NOT_FOUND
-            )
-    
+        profile = self._profile(request)
+        if profile is None:
+            return Response({'detail': 'Profile not found'}, status=status.HTTP_404_NOT_FOUND)
+        return Response(AlumniProfileSerializer(profile, context={'request': request}).data)
+
     def post(self, request):
-        # Check if profile already exists
-        if hasattr(request.user, 'alumni_profile'):
-            return Response(
-                {'detail': 'Profile already exists'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        serializer = AlumniProfileCreateSerializer(
-            data=request.data,
-            context={'request': request}
-        )
+        if self._profile(request) is not None:
+            return Response({'detail': 'Profile already exists'}, status=status.HTTP_400_BAD_REQUEST)
+        serializer = AlumniProfileWriteSerializer(data=request.data, context={'request': request})
         serializer.is_valid(raise_exception=True)
         profile = serializer.save()
-        
         return Response(
-            AlumniProfileSerializer(profile).data,
-            status=status.HTTP_201_CREATED
+            AlumniProfileSerializer(profile, context={'request': request}).data,
+            status=status.HTTP_201_CREATED,
         )
-    
+
     def put(self, request):
-        try:
-            profile = request.user.alumni_profile
-        except AlumniProfile.DoesNotExist:
-            return Response(
-                {'detail': 'Profile not found'},
-                status=status.HTTP_404_NOT_FOUND
-            )
-        
-        serializer = AlumniProfileUpdateSerializer(
-            profile,
-            data=request.data,
-            partial=True
+        profile = self._profile(request)
+        if profile is None:
+            return Response({'detail': 'Profile not found'}, status=status.HTTP_404_NOT_FOUND)
+        serializer = AlumniProfileWriteSerializer(
+            profile, data=request.data, partial=True, context={'request': request}
         )
         serializer.is_valid(raise_exception=True)
         serializer.save()
-        
-        return Response(AlumniProfileSerializer(profile).data)
+        return Response(AlumniProfileSerializer(profile, context={'request': request}).data)
+
+    patch = put
 
 
 class AlumniDetailView(APIView):
-    """Get alumni profile by ID (public for approved profiles)."""
+    """A profile by id: the full record for its owner and the committee,
+    otherwise the same view as the public directory (approved only)."""
+
     permission_classes = [AllowAny]
-    
+
     def get(self, request, pk):
-        try:
-            profile = AlumniProfile.objects.select_related('batch', 'user').get(pk=pk)
-            
-            # Only show approved profiles to public
-            if profile.status != 'approved' and (
-                not request.user.is_authenticated or 
-                request.user != profile.user
-            ):
-                return Response(
-                    {'detail': 'Profile not found'},
-                    status=status.HTTP_404_NOT_FOUND
-                )
-            
-            serializer = AlumniProfileSerializer(profile)
-            return Response(serializer.data)
-        except AlumniProfile.DoesNotExist:
-            return Response(
-                {'detail': 'Profile not found'},
-                status=status.HTTP_404_NOT_FOUND
-            )
+        profile = AlumniProfile.objects.select_related('batch', 'user', 'recommended_by', 'approved_by').filter(pk=pk).first()
+        if profile and is_committee(request.user):
+            return Response(AlumniReviewSerializer(profile, context={'request': request}).data)
+        if profile and request.user.is_authenticated and profile.user_id == request.user.id:
+            return Response(AlumniProfileSerializer(profile, context={'request': request}).data)
+        return public_profile_response(request, pk)

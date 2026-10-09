@@ -5,6 +5,8 @@ All v1 endpoints are registered here for modular routing.
 Future versions (v2, v3) can be created similarly.
 """
 from django.urls import path, include
+
+from batches.urls import coordinator_urlpatterns
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
@@ -24,6 +26,7 @@ class APIRootView(APIView):
                 'alumni': f"{base_url}alumni/",
                 'approvals': f"{base_url}approvals/",
                 'directory': f"{base_url}directory/",
+                'coordinator': f"{base_url}coordinator/",
             }
         })
 
@@ -36,6 +39,7 @@ v1_patterns = [
     path('alumni/', include('alumni.urls')),
     path('approvals/', include('approvals.urls')),
     path('directory/', include('directory.urls')),
+    path('coordinator/', include(coordinator_urlpatterns)),
 ]
 
 urlpatterns = [
