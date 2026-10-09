@@ -2,16 +2,22 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
-// In development the Django API runs on :8000 and is proxied, so the app
-// talks to its own origin and needs no CORS.
+// Development: the Laravel API runs on :8000 and is proxied, so the app talks
+// to its own origin. Production: `npm run build` writes into the Laravel app
+// (backend/public/app/), which serves the SPA and the API from one domain.
 const backend = process.env.BACKEND_URL || 'http://127.0.0.1:8000'
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
+  base: command === 'build' ? '/app/' : '/',
   plugins: [react(), tailwindcss()],
+  build: {
+    outDir: process.env.BUILD_OUT_DIR || '../backend/public/app',
+    emptyOutDir: true,
+  },
   server: {
     proxy: {
       '/api': backend,
-      '/media': backend,
+      '/uploads': backend,
     },
   },
-})
+}))

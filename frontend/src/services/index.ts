@@ -42,7 +42,8 @@ export const authService = {
 export const alumniService = {
     mine: () => api.get<AlumniProfile>('/alumni/me/').then((r) => r.data),
     create: (form: FormData) => api.post<AlumniProfile>('/alumni/me/', form).then((r) => r.data),
-    update: (form: FormData) => api.put<AlumniProfile>('/alumni/me/', form).then((r) => r.data),
+    // POST, not PUT: PHP only parses multipart file uploads on POST requests.
+    update: (form: FormData) => api.post<AlumniProfile>('/alumni/me/update/', form).then((r) => r.data),
 };
 
 export const directoryService = {

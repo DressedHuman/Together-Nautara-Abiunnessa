@@ -1,0 +1,29 @@
+<IfModule mod_rewrite.c>
+    <IfModule mod_negotiation.c>
+        Options -MultiViews -Indexes
+    </IfModule>
+
+    RewriteEngine On
+
+    # Pass the Authorization header to PHP (needed for Bearer tokens on Apache/LiteSpeed)
+    RewriteCond %{HTTP:Authorization} .
+    RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+    # Never serve dotfiles (.env, .git, ...) if they ever end up in the web root
+    RewriteRule (^|/)\.(?!well-known/) - [F,L]
+
+    # No trailing-slash redirect: the API uses /api/v1/.../ URLs, and a 301
+    # would turn POST requests into GET.
+
+    # Send everything that isn't a real file to the front controller
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteRule ^ index.php [L]
+</IfModule>
+
+# Uploaded photos are re-encoded JPEGs; never execute anything in uploads/
+<IfModule mod_headers.c>
+    <FilesMatch "\.(jpe?g|png|webp)$">
+        Header set X-Content-Type-Options "nosniff"
+    </FilesMatch>
+</IfModule>
